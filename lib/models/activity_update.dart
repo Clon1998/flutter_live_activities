@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:live_activities/models/live_activity_state.dart';
 
-abstract class ActivityUpdate {
+sealed class ActivityUpdate {
   ActivityUpdate({required this.activityId});
 
   final String activityId;
@@ -23,6 +23,7 @@ abstract class ActivityUpdate {
     }
   }
 
+  @Deprecated('Use pattern matching instead')
   TResult map<TResult extends Object?>({
     required TResult Function(ActiveActivityUpdate value) active,
     required TResult Function(EndedActivityUpdate value) ended,
@@ -30,6 +31,7 @@ abstract class ActivityUpdate {
     required TResult Function(UnknownActivityUpdate value) unknown,
   });
 
+  @Deprecated('Use pattern matching instead')
   TResult? mapOrNull<TResult extends Object?>({
     TResult Function(ActiveActivityUpdate value)? active,
     TResult Function(EndedActivityUpdate value)? ended,
@@ -51,6 +53,7 @@ class ActiveActivityUpdate extends ActivityUpdate {
   final String activityToken;
 
   @override
+  @Deprecated('Use pattern matching instead')
   map<TResult extends Object?>({
     required TResult Function(ActiveActivityUpdate value) active,
     required TResult Function(EndedActivityUpdate value) ended,
@@ -66,6 +69,7 @@ class ActiveActivityUpdate extends ActivityUpdate {
   }
 
   @override
+  @Deprecated('Use pattern matching instead')
   TResult? mapOrNull<TResult extends Object?>({
     TResult Function(ActiveActivityUpdate value)? active,
     TResult Function(EndedActivityUpdate value)? ended,
@@ -81,6 +85,7 @@ class EndedActivityUpdate extends ActivityUpdate {
   EndedActivityUpdate({required super.activityId});
 
   @override
+  @Deprecated('Use pattern matching instead')
   map<TResult extends Object?>({
     required TResult Function(ActiveActivityUpdate value) active,
     required TResult Function(EndedActivityUpdate value) ended,
@@ -91,6 +96,7 @@ class EndedActivityUpdate extends ActivityUpdate {
   }
 
   @override
+  @Deprecated('Use pattern matching instead')
   TResult? mapOrNull<TResult extends Object?>({
     TResult Function(ActiveActivityUpdate value)? active,
     TResult Function(EndedActivityUpdate value)? ended,
@@ -106,6 +112,7 @@ class StaleActivityUpdate extends ActivityUpdate {
   StaleActivityUpdate({required super.activityId});
 
   @override
+  @Deprecated('Use pattern matching instead')
   map<TResult extends Object?>({
     required TResult Function(ActiveActivityUpdate value) active,
     required TResult Function(EndedActivityUpdate value) ended,
@@ -116,6 +123,7 @@ class StaleActivityUpdate extends ActivityUpdate {
   }
 
   @override
+  @Deprecated('Use pattern matching instead')
   TResult? mapOrNull<TResult extends Object?>({
     TResult Function(ActiveActivityUpdate value)? active,
     TResult Function(EndedActivityUpdate value)? ended,
@@ -131,6 +139,7 @@ class UnknownActivityUpdate extends ActivityUpdate {
   UnknownActivityUpdate({required super.activityId});
 
   @override
+  @Deprecated('Use pattern matching instead')
   map<TResult extends Object?>({
     required TResult Function(ActiveActivityUpdate value) active,
     required TResult Function(EndedActivityUpdate value) ended,
@@ -141,6 +150,7 @@ class UnknownActivityUpdate extends ActivityUpdate {
   }
 
   @override
+  @Deprecated('Use pattern matching instead')
   TResult? mapOrNull<TResult extends Object?>({
     TResult Function(ActiveActivityUpdate value)? active,
     TResult Function(EndedActivityUpdate value)? ended,
