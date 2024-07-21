@@ -83,6 +83,13 @@ class MockLiveActivitiesPlatform
       [AlertConfig? alertConfig]) {
     return Future.value();
   }
+  @override
+  Future createOrUpdateActivity(String customId, Map<String, dynamic> data, {
+    bool removeWhenAppIsKilled = false,
+    Duration? staleIn,
+  }) {
+    return Future.value();
+  }
 }
 
 void main() {
