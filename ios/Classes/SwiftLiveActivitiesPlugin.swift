@@ -199,103 +199,137 @@ public class SwiftLiveActivitiesPlugin: NSObject, FlutterPlugin, FlutterStreamHa
       result(FlutterError(code: "WRONG_IOS_VERSION", message: "this version of iOS is not supported", details: nil))
     }
   }
-  
-  @available(iOS 16.1, *)
-  func createActivity(data: [String: Any], removeWhenAppIsKilled: Bool, staleIn: Int?, customId: String? = nil, result: @escaping FlutterResult) {
-    let center = UNUserNotificationCenter.current()
-    center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-      
-      if let error = error {
-        result(FlutterError(code: "AUTHORIZATION_ERROR", message: "authorization error", details: error.localizedDescription))
-      }
-    }
-
-    
-    let liveDeliveryAttributes: LiveActivitiesAppAttributes
-    if let customId = customId, let uuid = UUID(uuidString: customId) {
-        liveDeliveryAttributes = LiveActivitiesAppAttributes(id: uuid)
-    } else {
-        liveDeliveryAttributes = LiveActivitiesAppAttributes()
-    }
-    let initialContentState = LiveActivitiesAppAttributes.LiveDeliveryData(appGroupId: appGroupId!)
-    var deliveryActivity: Activity<LiveActivitiesAppAttributes>?
-    let prefix = liveDeliveryAttributes.id
-
-    for item in data {
-        sharedDefault!.set(item.value, forKey: "\(prefix)_\(item.key)")
-    }
-
-    if #available(iOS 16.2, *){
-      let activityContent = ActivityContent(
-        state: initialContentState,
-        staleDate: staleIn != nil ? Calendar.current.date(byAdding: .minute, value: staleIn!, to: Date.now) : nil)
-      do {
-        deliveryActivity = try Activity.request(
-          attributes: liveDeliveryAttributes,
-          content: activityContent,
-          pushType: .token)
-      } catch (let error) {
-        result(FlutterError(code: "LIVE_ACTIVITY_ERROR", message: "can't launch live activity", details: error.localizedDescription))
-      }
-    } else {
-      do {
-        deliveryActivity = try Activity<LiveActivitiesAppAttributes>.request(
-          attributes: liveDeliveryAttributes,
-          contentState: initialContentState,
-          pushType: .token)
-        
-      } catch (let error) {
-        result(FlutterError(code: "LIVE_ACTIVITY_ERROR", message: "can't launch live activity", details: error.localizedDescription))
-      }
-    }
-    if (deliveryActivity != nil) {
-      if removeWhenAppIsKilled {
-        appLifecycleLifeActiviyIds.append(deliveryActivity!.id)
-      }
-      monitorLiveActivity(deliveryActivity!)
-      result(deliveryActivity!.id)
-    }
-  }
-  
-  @available(iOS 16.1, *)
-  func updateActivity(activityId: String, data: [String: Any?], alertConfig: FlutterAlertConfig?, result: @escaping FlutterResult) {
+@available(iOS 16.1, *)
+func createActivity(data: [String: Any], removeWhenAppIsKilled: Bool, staleIn: Int?, customId: String? = nil, result: @escaping FlutterResult) {
     Task {
-      for activity in Activity<LiveActivitiesAppAttributes>.activities {
-        if activityId == activity.id {
-          let prefix = activity.attributes.id
-
-          for item in data {
-            if (item.value != nil && !(item.value is NSNull)) {
-              sharedDefault!.set(item.value, forKey: "\(prefix)_\(item.key)")
-            } else {
-              sharedDefault!.removeObject(forKey: "\(prefix)_\(item.key)")
+        let center = UNUserNotificationCenter.current()
+        do {
+            let authorizationStatus = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            guard authorizationStatus else {
+                result(FlutterError(code: "AUTHORIZATION_ERROR", message: "Notification authorization denied", details: nil))
+                return
             }
-          }
-          
-          let updatedStatus = LiveActivitiesAppAttributes.LiveDeliveryData(appGroupId: self.appGroupId!)
-          await activity.update(using: updatedStatus, alertConfiguration: alertConfig?.getAlertConfig())
-          break;
+        } catch {
+            result(FlutterError(code: "AUTHORIZATION_ERROR", message: "Authorization error", details: error.localizedDescription))
+            return
         }
-      }
-      result(nil)
-    }
-  }
 
-  @available(iOS 16.1, *)
-  func createOrUpdateActivity(data: [String: Any], customId: String, removeWhenAppIsKilled: Bool, staleIn: Int?, result: @escaping FlutterResult) {
+        let liveDeliveryAttributes: LiveActivitiesAppAttributes
+        if let customId = customId, let uuid = UUID(uuidString: customId) {
+            liveDeliveryAttributes = LiveActivitiesAppAttributes(id: uuid)
+        } else {
+            liveDeliveryAttributes = LiveActivitiesAppAttributes()
+        }
+
+        let initialContentState = LiveActivitiesAppAttributes.LiveDeliveryData(appGroupId: appGroupId!)
+        let prefix = liveDeliveryAttributes.id
+
+        await MainActor.run {
+            for (key, value) in data {
+                sharedDefault?.set(value, forKey: "\(prefix)_\(key)")
+            }
+        }
+
+        var deliveryActivity: Activity<LiveActivitiesAppAttributes>?
+
+        if #available(iOS 16.2, *) {
+            let staleDate = staleIn.flatMap { Calendar.current.date(byAdding: .minute, value: $0, to: .now) }
+            let activityContent = ActivityContent(state: initialContentState, staleDate: staleDate)
+            do {
+                deliveryActivity = try Activity.request(
+                    attributes: liveDeliveryAttributes,
+                    content: activityContent,
+                    pushType: .token
+                )
+            } catch {
+                result(FlutterError(code: "LIVE_ACTIVITY_ERROR", message: "Can't launch live activity", details: error.localizedDescription))
+                return
+            }
+        } else {
+            do {
+                deliveryActivity = try Activity<LiveActivitiesAppAttributes>.request(
+                    attributes: liveDeliveryAttributes,
+                    contentState: initialContentState,
+                    pushType: .token
+                )
+            } catch {
+                result(FlutterError(code: "LIVE_ACTIVITY_ERROR", message: "Can't launch live activity", details: error.localizedDescription))
+                return
+            }
+        }
+
+        
+        if let deliveryActivity = deliveryActivity {
+            await MainActor.run {
+                if removeWhenAppIsKilled {
+                    appLifecycleLifeActiviyIds.append(deliveryActivity.id)
+                }
+                monitorLiveActivity(deliveryActivity)
+            }
+            result(deliveryActivity.id)
+        } else {
+            result(FlutterError(code: "LIVE_ACTIVITY_ERROR", message: "Failed to create activity", details: nil))
+        }
+
+    }
+}
+
+@available(iOS 16.1, *)
+func updateActivity(activityId: String, data: [String: Any?], alertConfig: FlutterAlertConfig?, result: @escaping FlutterResult) {
     Task {
-      var customUUID = UUID(uuidString: customId)
-      var activityId: String? = Activity<LiveActivitiesAppAttributes>.activities.first {
-          $0.attributes.id == customUUID && $0.activityState != .dismissed && $0.activityState != .ended
-      }?.id
+        let activities = await MainActor.run { Activity<LiveActivitiesAppAttributes>.activities }
+        guard let activity = activities.first(where: { $0.id == activityId }) else {
+            result(FlutterError(code: "ACTIVITY_ERROR", message: "Activity not found", details: nil))
+            return
+        }
 
-      if activityId != nil {
-        updateActivity(activityId: activityId!, data: data, alertConfig: nil, result: result)
-      } else {
-        createActivity(data: data, removeWhenAppIsKilled: removeWhenAppIsKilled, staleIn: staleIn, customId: customId, result: result)
-      }
+        let prefix = activity.attributes.id
+
+        await MainActor.run {
+            for (key, value) in data {
+                if let value = value, !(value is NSNull) {
+                    sharedDefault?.set(value, forKey: "\(prefix)_\(key)")
+                } else {
+                    sharedDefault?.removeObject(forKey: "\(prefix)_\(key)")
+                }
+            }
+        }
+
+        let updatedStatus = LiveActivitiesAppAttributes.LiveDeliveryData(appGroupId: self.appGroupId!)
+        await activity.update(using: updatedStatus, alertConfiguration: alertConfig?.getAlertConfig())
+
+        result(nil)
     }
-  }
+}
+
+@available(iOS 16.1, *)
+func createOrUpdateActivity(data: [String: Any], customId: String, removeWhenAppIsKilled: Bool, staleIn: Int?, result: @escaping FlutterResult) {
+    Task {
+        guard let customUUID = UUID(uuidString: customId) else {
+            result(FlutterError(code: "WRONG_ARGS", message: "argument are not valid, check if 'customId' is valid", details: nil))
+            return
+        }
+
+        var activities: [Activity<LiveActivitiesAppAttributes>] = []
+        for _ in 0..<3 { // Try up to 3 times
+            activities = await MainActor.run { Activity<LiveActivitiesAppAttributes>.activities }
+            if !activities.isEmpty {
+                break
+            }
+            try? await Task.sleep(for: .seconds(0.1))
+        }
+
+        let existingActivity = activities.first {
+            $0.attributes.id == customUUID && $0.activityState != .dismissed && $0.activityState != .ended
+        }
+
+        if let activityId = existingActivity?.id {
+            updateActivity(activityId: activityId, data: data, alertConfig: nil, result: result)
+        } else {
+            createActivity(data: data, removeWhenAppIsKilled: removeWhenAppIsKilled, staleIn: staleIn, customId: customId, result: result)
+        }
+    }
+}
 
   @available(iOS 16.1, *)
   func getActivityState(activityId: String, result: @escaping FlutterResult) {
